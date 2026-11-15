@@ -1,0 +1,19 @@
+services:
+  broker:
+    image: redis:7-alpine
+
+  manager:
+    build: ./manager
+    ports:
+      - "8080:5000"
+    depends_on:
+      - broker
+    restart: always
+
+  worker:
+    build: ./worker
+    depends_on:
+      - broker
+    restart: always
+    deploy:
+      replicas: 3
