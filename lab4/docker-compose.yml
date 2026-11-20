@@ -1,6 +1,9 @@
 services:
   broker:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
 
   manager:
     build: ./manager
@@ -8,7 +11,9 @@ services:
       - "8080:5000"
     depends_on:
       - broker
+      - worker
     restart: always
+    stop_grace_period: 40s
 
   worker:
     build: ./worker
@@ -17,3 +22,6 @@ services:
     restart: always
     deploy:
       replicas: 3
+
+volumes:
+  redis-data:

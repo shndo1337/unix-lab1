@@ -1,3 +1,4 @@
+import signal
 import socket
 import time
 from collections import Counter
@@ -5,9 +6,27 @@ import redis
 
 r = redis.Redis(host="broker", decode_responses=True)
 name = socket.gethostname()
+stopping = False
 
-while True:
-    task = r.blpop("tasks")[1]
+
+def stop(signum, frame):
+    global stopping
+    stopping = True
+
+
+signal.signal(signal.SIGTERM, stop)
+
+while not stopping:
+    task = r.blmove("tasks", "tasks:processing", timeout=1)
+    if task is None:
+        continue
+    if stopping:
+        with r.pipeline() as pipe:
+            pipe.lpush("tasks", task)
+            pipe.lrem("tasks:processing", 1, task)
+            pipe.execute()
+        break
+
     task_id, text = task.split(":", 1)
     time.sleep(1)
     words = [w.strip(".,!?;:\"()") for w in text.lower().split()]
@@ -17,4 +36,7 @@ while True:
     for word, count in top:
         answer = answer + word + " - " + str(count) + "; "
     answer = answer + "посчитал " + name
-    r.rpush("result:" + task_id, answer)
+    with r.pipeline() as pipe:
+        pipe.rpush("result:" + task_id, answer)
+        pipe.lrem("tasks:processing", 1, task)
+        pipe.execute()
